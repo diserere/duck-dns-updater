@@ -89,10 +89,11 @@ VERBOSE=""
 UPDATE_URL="https://www.duckdns.org/update?domains=${DOMAINS}&token=${TOKEN}&ip=${IP}${VERBOSE}"
 
 if [[ -n "${TZ:-}" ]]; then
-    DATE=$(TZ="$TZ" date --rfc-3339=seconds)
+    export TZ
 else
-    DATE=$(date --rfc-3339=seconds)
+    unset TZ
 fi
+DATE=$(date --rfc-3339=seconds)
 
 RESPONSE=$(curl -s "$UPDATE_URL")
 RCODE=$?
