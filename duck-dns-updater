@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Скрипт для регулярного обновления динамических записей на DuckDNS.
+# Сервер в случае успешного обновления возвращает ответ "OK". В случае неуспешного - ответ "KO".
+# Документация DuckDNS: https://www.duckdns.org/spec.jsp
+#
+# Чтобы добавить этот скрипт в свой crontab, выполните команду `crontab -e`, и добавьте туда следующую строку:
+# */5 * * * * ~/<путь к скрипту>/duck-dns-updater -v -d >/dev/null 2>&1
+#
+# TODO: Научиться генерировать строку для crontab с автоматической подстановкой правильного пути к скрипту по флагу при запуске.
+
+# TODO: Научиться обрабатывать ошибки Bad Gateway, которые оставляют в логе вот такие сообщения:
+# 
+# 2026-11-05 11:00:01+03:00|0|<html>
+#  <head><title>502 Bad Gateway</title></head>
+#  <body>
+#  <center><h1>502 Bad Gateway</h1></center>
+#  </body>
+#  </html>
+
+# TODO: научиться обрабатывать ответ сервера из заголовков, и включать его тоже в лог. Само сообщение включать в лог только если код ответа 200.
+# Это будет более изящное решение, чем парсить тексты ошибок типа Бэдгейтвей из тела ответа.
+# Вот пример ответа:
+# 
+# HTTP/2 200 
+# date: Thu, 05 Nov 2026 03:54:02 GMT
+# set-cookie: AWSALB=u2Vm9qY5gXrstLUWcn5IqKZysOElM4icDrrntViSJ4Lfb3zKBvFOGQFBvgNL3OI0ycdIJ3i7bTftVI9dEdD/OBZ7unaSxmIOjYzaxQZba2N6hkCUBbU9KwEuxEHr; Expires=Thu, 12 Nov 2026 03:54:02 GMT; Path=/
+# set-cookie: AWSALBCORS=u2Vm9qY5gXrstLUWcn5IqKZysOElM4icDrrntViSJ4Lfb3zKBvFOGQFBvgNL3OI0ycdIJ3i7bTftVI9dEdD/OBZ7unaSxmIOjYzaxQZba2N6hkCUBbU9KwEuxEHr; Expires=Thu, 12 Nov 2026 03:54:02 GMT; Path=/; SameSite=None; Secure
+# server: nginx/1.30.3
+# x-clacks-overhead: GNU Terry Pratchett
+# x-frame-options: DENY
+# 
+# OK 188.244.39.72 NOCHANGE
+
+
+SCRIPT_DIR="$(dirname $0)"
+
+# Безопасные плейсхолдеры для переменных.
+DOMAINS="exampledomain,anotherdomain"
+TOKEN="DUCKDNS-USER-TOKEN"
+TZ="${TIMEZONE:-UTC}"
+IP=""
+
+# Не храните персональные данные, такие как обновляемые домены и токен доступа,
+# в самом скрипте, если вы сохраняете его в репозитории git.
+# Поместите их в отдельный файл .env, расположенный в той же директории, что и скрипт.
+[ -f "${SCRIPT_DIR}/.env" ] && source ${SCRIPT_DIR}/.env
+
+
+LOG_FILE="${SCRIPT_DIR}/$(basename $0).log"
+
+if [ "$1" == "-l" ]; then
+    if [ -f "${LOG_FILE}" ]; then
+        echo
+        echo "Лог обновления записей DuckDNS для доменных имен: ${DOMAINS}"
+        echo
+        column -t -N "DATE,CODE,STATUS" -R 2 -s "|" "${LOG_FILE}"
+    else
+        echo "Error: logfile ${LOG_FILE} not found or not a regular file"
+    fi
+    exit
+fi
+
+[ "$1" == "-R" ] && echo "" > ${LOG_FILE} && exit
+
+
+[ "$1" == "-tz" ] && TZ=$2 && shift 2
+# echo -n "TZ: ${TZ} " >> ${LOG_FILE}
+
+VERBOSE=""
+[ "$1" == "-v" ] && VERBOSE="&verbose=true" && shift
+
+[ "$1" == "-d" ] && DAEMON=1 && shift
+
+[ "$1" == "-u" ] && UPDATES_ONLY=1 && shift
+
+
+UPDATE_URL="https://www.duckdns.org/update?domains=${DOMAINS}&token=${TOKEN}&ip=${IP}${VERBOSE}"
+
+DATE=$(TZ=${TZ} date --rfc-3339=seconds)
+
+RESPONSE=$(curl -s ${UPDATE_URL})
+# RESPONSE=$(curl -si ${UPDATE_URL})
+RCODE=$?
+
+OUT=${DATE}"|"${RCODE}"|"${RESPONSE:-"(no response)"}
+
+if [ -n "${DAEMON}" ]; then
+    if [ -n "${UPDATES_ONLY}" ]; then
+        echo -e $OUT | grep -qv 'NOCHANGE' && echo -e $OUT >> ${LOG_FILE}
+    else
+        echo -e $OUT >> ${LOG_FILE}
+    fi
+else
+    echo -e $OUT
+fi
