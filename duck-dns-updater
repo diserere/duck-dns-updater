@@ -3,10 +3,7 @@
 # Сервер в случае успешного обновления возвращает ответ "OK". В случае неуспешного - ответ "KO".
 # Документация DuckDNS: https://www.duckdns.org/spec.jsp
 #
-# Чтобы добавить этот скрипт в свой crontab, выполните команду `crontab -e`, и добавьте туда следующую строку:
-# */5 * * * * ~/<путь к скрипту>/duck-dns-updater -v -d >/dev/null 2>&1
-#
-# TODO: Научиться генерировать строку для crontab с автоматической подстановкой правильного пути к скрипту по флагу при запуске.
+# Чтобы вывести готовую строку crontab с абсолютным путём, запустите скрипт с флагом `--print-cron`.
 
 # TODO: Научиться обрабатывать ошибки Bad Gateway, которые оставляют в логе вот такие сообщения:
 # 
@@ -32,7 +29,15 @@
 # OK 188.244.39.72 NOCHANGE
 
 
-SCRIPT_DIR="$(dirname $0)"
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/$(basename -- "$SCRIPT_SOURCE")"
+
+if [[ "${1:-}" == "--print-cron" || "${1:-}" == "-p" ]]; then
+    printf -v CRON_SCRIPT_PATH '%q' "$SCRIPT_PATH"
+    printf '*/5 * * * * %s -v -d -u >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
+    exit 0
+fi
 
 # Безопасные плейсхолдеры для переменных.
 DOMAINS="exampledomain,anotherdomain"
@@ -43,53 +48,63 @@ IP=""
 # Не храните персональные данные, такие как обновляемые домены и токен доступа,
 # в самом скрипте, если вы сохраняете его в репозитории git.
 # Поместите их в отдельный файл .env, расположенный в той же директории, что и скрипт.
-[ -f "${SCRIPT_DIR}/.env" ] && source ${SCRIPT_DIR}/.env
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [[ -f "$ENV_FILE" ]]; then
+    # .env — доверенный Bash-конфиг: source выполняет команды из файла.
+    source "$ENV_FILE"
+fi
 
 
-LOG_FILE="${SCRIPT_DIR}/$(basename $0).log"
+LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_FILE="${LOG_DIR}/$(basename -- "$SCRIPT_SOURCE").log"
 
-if [ "$1" == "-l" ]; then
-    if [ -f "${LOG_FILE}" ]; then
+if [[ "${1:-}" == "-l" ]]; then
+    if [[ -f "$LOG_FILE" ]]; then
         echo
         echo "Лог обновления записей DuckDNS для доменных имен: ${DOMAINS}"
         echo
-        column -t -N "DATE,CODE,STATUS" -R 2 -s "|" "${LOG_FILE}"
+        column -t -N "DATE,CODE,STATUS" -R 2 -s "|" "$LOG_FILE"
     else
-        echo "Error: logfile ${LOG_FILE} not found or not a regular file"
+        echo "Error: logfile $LOG_FILE not found or not a regular file"
     fi
     exit
 fi
 
-[ "$1" == "-R" ] && echo "" > ${LOG_FILE} && exit
+if [[ "${1:-}" == "-R" ]]; then
+    mkdir -p "$LOG_DIR" || exit 1
+    : > "$LOG_FILE"
+    exit $?
+fi
 
 
-[ "$1" == "-tz" ] && TZ=$2 && shift 2
-# echo -n "TZ: ${TZ} " >> ${LOG_FILE}
+[[ "${1:-}" == "-tz" ]] && TZ="$2" && shift 2
 
 VERBOSE=""
-[ "$1" == "-v" ] && VERBOSE="&verbose=true" && shift
+[[ "${1:-}" == "-v" ]] && VERBOSE="&verbose=true" && shift
 
-[ "$1" == "-d" ] && DAEMON=1 && shift
+[[ "${1:-}" == "-d" ]] && DAEMON=1 && shift
 
-[ "$1" == "-u" ] && UPDATES_ONLY=1 && shift
+[[ "${1:-}" == "-u" ]] && UPDATES_ONLY=1 && shift
 
 
 UPDATE_URL="https://www.duckdns.org/update?domains=${DOMAINS}&token=${TOKEN}&ip=${IP}${VERBOSE}"
 
-DATE=$(TZ=${TZ} date --rfc-3339=seconds)
+DATE=$(TZ="$TZ" date --rfc-3339=seconds)
 
-RESPONSE=$(curl -s ${UPDATE_URL})
-# RESPONSE=$(curl -si ${UPDATE_URL})
+RESPONSE=$(curl -s "$UPDATE_URL")
 RCODE=$?
 
-OUT=${DATE}"|"${RCODE}"|"${RESPONSE:-"(no response)"}
+# Подробный ответ DuckDNS может содержать переводы строк; запись журнала должна оставаться однострочной.
+RESPONSE="${RESPONSE//$'\r'/ }"
+RESPONSE="${RESPONSE//$'\n'/ }"
 
-if [ -n "${DAEMON}" ]; then
-    if [ -n "${UPDATES_ONLY}" ]; then
-        echo -e $OUT | grep -qv 'NOCHANGE' && echo -e $OUT >> ${LOG_FILE}
-    else
-        echo -e $OUT >> ${LOG_FILE}
+OUT="${DATE}|${RCODE}|${RESPONSE:-"(no response)"}"
+
+if [[ -n "${DAEMON:-}" ]]; then
+    mkdir -p "$LOG_DIR" || exit 1
+    if [[ -z "${UPDATES_ONLY:-}" || "$OUT" != *NOCHANGE* ]]; then
+        printf '%s\n' "$OUT" >> "$LOG_FILE"
     fi
 else
-    echo -e $OUT
+    printf '%s\n' "$OUT"
 fi
