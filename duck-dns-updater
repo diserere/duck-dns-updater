@@ -94,6 +94,10 @@ DATE=$(TZ="$TZ" date --rfc-3339=seconds)
 RESPONSE=$(curl -s "$UPDATE_URL")
 RCODE=$?
 
+# Подробный ответ DuckDNS может содержать переводы строк; запись журнала должна оставаться однострочной.
+RESPONSE="${RESPONSE//$'\r'/ }"
+RESPONSE="${RESPONSE//$'\n'/ }"
+
 OUT="${DATE}|${RCODE}|${RESPONSE:-"(no response)"}"
 
 if [[ -n "${DAEMON:-}" ]]; then
