@@ -42,7 +42,6 @@ fi
 # Безопасные плейсхолдеры для переменных.
 DOMAINS="exampledomain,anotherdomain"
 TOKEN="DUCKDNS-USER-TOKEN"
-TZ="${TIMEZONE:-UTC}"
 IP=""
 
 # Не храните персональные данные, такие как обновляемые домены и токен доступа,
@@ -89,7 +88,12 @@ VERBOSE=""
 
 UPDATE_URL="https://www.duckdns.org/update?domains=${DOMAINS}&token=${TOKEN}&ip=${IP}${VERBOSE}"
 
-DATE=$(TZ="$TZ" date --rfc-3339=seconds)
+if [[ -n "${TZ:-}" ]]; then
+    export TZ
+else
+    unset TZ
+fi
+DATE=$(date --rfc-3339=seconds)
 
 RESPONSE=$(curl -s "$UPDATE_URL")
 RCODE=$?
