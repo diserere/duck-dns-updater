@@ -3,7 +3,7 @@
 # Сервер в случае успешного обновления возвращает ответ "OK". В случае неуспешного - ответ "KO".
 # Документация DuckDNS: https://www.duckdns.org/spec.jsp
 #
-# Чтобы вывести готовую строку crontab с абсолютным путём, запустите скрипт с флагом `--print-cron`.
+# Чтобы вывести готовую строку crontab с абсолютным путём, запустите скрипт с флагом `--print-cronjob`.
 
 # TODO: Научиться обрабатывать ошибки Bad Gateway, которые оставляют в логе вот такие сообщения:
 # 
@@ -33,9 +33,105 @@ SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" && pwd)"
 SCRIPT_PATH="${SCRIPT_DIR}/$(basename -- "$SCRIPT_SOURCE")"
 
-if [[ "${1:-}" == "--print-cron" || "${1:-}" == "-p" ]]; then
+usage() {
+    cat <<'HELP'
+Использование: duck-dns-updater [ФЛАГИ]
+
+Режимы:
+  -p, --print-cronjob   Вывести готовую строку cronjob.
+  -l, --list-journal    Показать журнал.
+  -R, --reset-journal   Очистить журнал.
+  -h, --help            Показать эту справку.
+
+Флаги обновления:
+  -tz, --timezone ЗОНА  Задать часовую зону для отметки времени.
+  -v, --verbose         Запросить подробный ответ DuckDNS.
+  -j, --journal         Добавлять результаты в журнал.
+  -u, --updates-only    Не выводить ответы NOCHANGE.
+
+Флаги обновления можно указывать в любом порядке. -u действует и при
+выводе в консоль, и при записи в журнал. Для режимов -p, -l и -R
+нельзя указывать другие флаги.
+
+Примеры:
+  duck-dns-updater --verbose --journal --updates-only
+  duck-dns-updater --timezone Europe/Moscow --verbose
+  duck-dns-updater --print-cronjob
+  duck-dns-updater --list-journal
+HELP
+}
+
+usage_error() {
+    printf 'Ошибка: %s\n\n' "$1" >&2
+    usage >&2
+    exit 2
+}
+
+set_mode() {
+    if [[ -n "$ARG_MODE" ]]; then
+        usage_error "режимы командной строки нельзя сочетать"
+    fi
+    ARG_MODE="$1"
+}
+
+ARG_MODE=""
+ARG_VERBOSE=0
+ARG_JOURNAL=0
+ARG_UPDATES_ONLY=0
+ARG_TZ_SET=0
+ARG_TZ=""
+
+while (($# > 0)); do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -p|--print-cronjob)
+            set_mode "print-cronjob"
+            shift
+            ;;
+        -l|--list-journal)
+            set_mode "list-journal"
+            shift
+            ;;
+        -R|--reset-journal)
+            set_mode "reset-journal"
+            shift
+            ;;
+        -tz|--timezone)
+            if (($# < 2)) || [[ -z "$2" || "$2" == -* ]]; then
+                usage_error "для $1 нужно указать часовую зону"
+            fi
+            ARG_TZ="$2"
+            ARG_TZ_SET=1
+            shift 2
+            ;;
+        -v|--verbose)
+            ARG_VERBOSE=1
+            shift
+            ;;
+        -j|--journal)
+            ARG_JOURNAL=1
+            shift
+            ;;
+        -u|--updates-only)
+            ARG_UPDATES_ONLY=1
+            shift
+            ;;
+        *)
+            usage_error "неизвестный флаг или лишнее значение: $1"
+            ;;
+    esac
+done
+
+if [[ -n "$ARG_MODE" ]] && ((ARG_VERBOSE || ARG_JOURNAL || ARG_UPDATES_ONLY || ARG_TZ_SET)); then
+    usage_error "режимы командной строки нельзя сочетать с флагами обновления"
+fi
+
+if [[ "$ARG_MODE" == "print-cronjob" ]]; then
     printf -v CRON_SCRIPT_PATH '%q' "$SCRIPT_PATH"
-    printf '*/5 * * * * %s -v -d -u >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
+    printf '*/5 * * * * %s --verbose --journal --updates-only >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
     exit 0
 fi
 
@@ -53,37 +149,36 @@ if [[ -f "$ENV_FILE" ]]; then
     source "$ENV_FILE"
 fi
 
+if ((ARG_TZ_SET)); then
+    TZ="$ARG_TZ"
+fi
 
 LOG_DIR="${SCRIPT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/$(basename -- "$SCRIPT_SOURCE").log"
 
-if [[ "${1:-}" == "-l" ]]; then
-    if [[ -f "$LOG_FILE" ]]; then
-        echo
-        echo "Лог обновления записей DuckDNS для доменных имен: ${DOMAINS}"
-        echo
-        column -t -N "DATE,CODE,STATUS" -R 2 -s "|" "$LOG_FILE"
-    else
-        echo "Error: logfile $LOG_FILE not found or not a regular file"
-    fi
-    exit
-fi
-
-if [[ "${1:-}" == "-R" ]]; then
-    mkdir -p "$LOG_DIR" || exit 1
-    : > "$LOG_FILE"
-    exit $?
-fi
-
-
-[[ "${1:-}" == "-tz" ]] && TZ="$2" && shift 2
-
 VERBOSE=""
-[[ "${1:-}" == "-v" ]] && VERBOSE="&verbose=true" && shift
+if ((ARG_VERBOSE)); then
+    VERBOSE="&verbose=true"
+fi
 
-[[ "${1:-}" == "-d" ]] && DAEMON=1 && shift
-
-[[ "${1:-}" == "-u" ]] && UPDATES_ONLY=1 && shift
+case "$ARG_MODE" in
+    list-journal)
+        if [[ -f "$LOG_FILE" ]]; then
+            echo
+            echo "Журнал обновления записей DuckDNS для доменных имён: ${DOMAINS}"
+            echo
+            column -t -N "DATE,CODE,STATUS" -R 2 -s "|" "$LOG_FILE"
+        else
+            echo "Ошибка: файл журнала $LOG_FILE не найден или не является обычным файлом"
+        fi
+        exit
+        ;;
+    reset-journal)
+        mkdir -p "$LOG_DIR" || exit 1
+        : > "$LOG_FILE"
+        exit $?
+        ;;
+esac
 
 
 UPDATE_URL="https://www.duckdns.org/update?domains=${DOMAINS}&token=${TOKEN}&ip=${IP}${VERBOSE}"
@@ -104,11 +199,11 @@ RESPONSE="${RESPONSE//$'\n'/ }"
 
 OUT="${DATE}|${RCODE}|${RESPONSE:-"(no response)"}"
 
-if [[ -n "${DAEMON:-}" ]]; then
-    mkdir -p "$LOG_DIR" || exit 1
-    if [[ -z "${UPDATES_ONLY:-}" || "$OUT" != *NOCHANGE* ]]; then
+if [[ -z "$ARG_UPDATES_ONLY" || "$RESPONSE" != *NOCHANGE* ]]; then
+    if ((ARG_JOURNAL)); then
+        mkdir -p "$LOG_DIR" || exit 1
         printf '%s\n' "$OUT" >> "$LOG_FILE"
+    else
+        printf '%s\n' "$OUT"
     fi
-else
-    printf '%s\n' "$OUT"
 fi
