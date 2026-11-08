@@ -33,7 +33,7 @@ SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")" && pwd)"
 SCRIPT_PATH="${SCRIPT_DIR}/$(basename -- "$SCRIPT_SOURCE")"
 
-if [[ "${1:-}" == "--print-cron" ]]; then
+if [[ "${1:-}" == "--print-cron" || "${1:-}" == "-p" ]]; then
     printf -v CRON_SCRIPT_PATH '%q' "$SCRIPT_PATH"
     printf '*/5 * * * * %s -v -d -u >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
     exit 0
