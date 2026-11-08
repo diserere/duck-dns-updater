@@ -199,7 +199,7 @@ RESPONSE="${RESPONSE//$'\n'/ }"
 
 OUT="${DATE}|${RCODE}|${RESPONSE:-"(no response)"}"
 
-if [[ -z "$ARG_UPDATES_ONLY" || "$RESPONSE" != *NOCHANGE* ]]; then
+if ((ARG_UPDATES_ONLY == 0)) || [[ "$RESPONSE" != *NOCHANGE* ]]; then
     if ((ARG_JOURNAL)); then
         mkdir -p "$LOG_DIR" || exit 1
         printf '%s\n' "$OUT" >> "$LOG_FILE"
