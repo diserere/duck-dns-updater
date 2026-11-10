@@ -145,7 +145,7 @@ case "$ARG_MODE" in
         exit 0
         ;;
     version)
-        printf 'duck-dns-updater %s\n' "$VERSION"
+        printf 'duck-dns-updater v%s\n' "$VERSION"
         exit 0
         ;;
 esac
