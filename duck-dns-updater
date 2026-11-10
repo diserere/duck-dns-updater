@@ -49,9 +49,9 @@ usage() {
   -j, --journal         Добавлять результаты в журнал.
   -u, --updates-only    Не выводить ответы NOCHANGE.
 
-Флаги обновления можно указывать в любом порядке. -u действует и при
-выводе в консоль, и при записи в журнал. Для режимов -p, -l и -R
-нельзя указывать другие флаги.
+Флаги обновления можно указывать в любом порядке. -u автоматически
+запрашивает подробный ответ и скрывает NOCHANGE и при выводе в консоль,
+и при записи в журнал. Для режимов -p, -l и -R нельзя указывать другие флаги.
 
 Примеры:
   duck-dns-updater --verbose --journal --updates-only
@@ -157,7 +157,7 @@ LOG_DIR="${SCRIPT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/$(basename -- "$SCRIPT_SOURCE").log"
 
 VERBOSE=""
-if ((ARG_VERBOSE)); then
+if ((ARG_VERBOSE || ARG_UPDATES_ONLY)); then
     VERBOSE="&verbose=true"
 fi
 
