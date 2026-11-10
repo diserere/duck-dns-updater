@@ -5,6 +5,8 @@
 #
 # Чтобы вывести готовую строку crontab с абсолютным путём, запустите скрипт с флагом `--print-cronjob`.
 
+readonly VERSION="0.1.0"
+
 # TODO: Научиться обрабатывать ошибки Bad Gateway, которые оставляют в логе вот такие сообщения:
 # 
 # 2026-11-05 11:00:01+03:00|0|<html>
@@ -39,6 +41,7 @@ usage() {
 
 Режимы:
   -p, --print-cronjob   Вывести готовую строку cronjob.
+  -V, --version         Показать версию скрипта.
   -l, --list-journal    Показать журнал.
   -R, --reset-journal   Очистить журнал.
   -h, --help            Показать эту справку.
@@ -51,9 +54,11 @@ usage() {
 
 Флаги обновления можно указывать в любом порядке. -u автоматически
 запрашивает подробный ответ и скрывает NOCHANGE и при выводе в консоль,
-и при записи в журнал. Для режимов -p, -l и -R нельзя указывать другие флаги.
+и при записи в журнал. Режимы -h, -V, -p, -l и -R нельзя сочетать
+с другими флагами.
 
 Примеры:
+  duck-dns-updater --version
   duck-dns-updater --verbose --journal
   duck-dns-updater --journal --updates-only
   duck-dns-updater --timezone Europe/Moscow --verbose
@@ -85,8 +90,12 @@ ARG_TZ=""
 while (($# > 0)); do
     case "$1" in
         -h|--help)
-            usage
-            exit 0
+            set_mode "help"
+            shift
+            ;;
+        -V|--version)
+            set_mode "version"
+            shift
             ;;
         -p|--print-cronjob)
             set_mode "print-cronjob"
@@ -129,6 +138,17 @@ done
 if [[ -n "$ARG_MODE" ]] && ((ARG_VERBOSE || ARG_JOURNAL || ARG_UPDATES_ONLY || ARG_TZ_SET)); then
     usage_error "режимы командной строки нельзя сочетать с флагами обновления"
 fi
+
+case "$ARG_MODE" in
+    help)
+        usage
+        exit 0
+        ;;
+    version)
+        printf 'duck-dns-updater %s\n' "$VERSION"
+        exit 0
+        ;;
+esac
 
 if [[ "$ARG_MODE" == "print-cronjob" ]]; then
     printf -v CRON_SCRIPT_PATH '%q' "$SCRIPT_PATH"
