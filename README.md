@@ -31,7 +31,7 @@ cp .env.example .env
 Журнал при запуске с `--journal` сохраняется в `logs/`. Имя файла зависит от имени скрипта, например `logs/duck-dns-updater.log`. Каталог создаётся при первой записи и исключён из Git.
 
 ```cron
-*/5 * * * * /абсолютный/путь/к/duck-dns-updater --verbose --journal --updates-only >/dev/null 2>&1
+*/5 * * * * /абсолютный/путь/к/duck-dns-updater --journal --updates-only >/dev/null 2>&1
 ```
 
 ## Аргументы
@@ -55,7 +55,7 @@ cp .env.example .env
 
 ```bash
 ./duck-dns-updater --verbose
-./duck-dns-updater --verbose --journal --updates-only
+./duck-dns-updater --journal --updates-only
 ./duck-dns-updater --timezone Europe/Moscow --verbose
 ./duck-dns-updater --list-journal
 ./duck-dns-updater --reset-journal

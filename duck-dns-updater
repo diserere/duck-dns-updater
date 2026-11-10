@@ -54,7 +54,8 @@ usage() {
 и при записи в журнал. Для режимов -p, -l и -R нельзя указывать другие флаги.
 
 Примеры:
-  duck-dns-updater --verbose --journal --updates-only
+  duck-dns-updater --verbose --journal
+  duck-dns-updater --journal --updates-only
   duck-dns-updater --timezone Europe/Moscow --verbose
   duck-dns-updater --print-cronjob
   duck-dns-updater --list-journal
@@ -131,7 +132,7 @@ fi
 
 if [[ "$ARG_MODE" == "print-cronjob" ]]; then
     printf -v CRON_SCRIPT_PATH '%q' "$SCRIPT_PATH"
-    printf '*/5 * * * * %s --verbose --journal --updates-only >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
+    printf '*/5 * * * * %s --journal --updates-only >/dev/null 2>&1\n' "$CRON_SCRIPT_PATH"
     exit 0
 fi
 
